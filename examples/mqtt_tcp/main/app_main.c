@@ -20,6 +20,12 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 
+// by CJB 2018.11.21
+#include "sdkconfig.h"
+#include "driver/gpio.h"
+//#define BLINK_GPIO CONFIG_BLINK_GPIO
+#define BLINK_GPIO 5
+
 static const char *TAG = "MQTT_SAMPLE";
 
 static EventGroupHandle_t wifi_event_group;
@@ -124,9 +130,32 @@ static void mqtt_app_start(void)
     esp_mqtt_client_start(client);
 }
 
+void blink_task(void *pvParameter)
+{
+    /* Configure the IOMUX register for pad BLINK_GPIO (some pads are
+       muxed to GPIO on reset already, but some default to other
+       functions and need to be switched to GPIO. Consult the
+       Technical Reference for a list of pads and their default
+       functions.)
+    */
+	//ESP_LOGI(TAG, "select gpio");
+    gpio_pad_select_gpio(BLINK_GPIO);
+    /* Set the GPIO as a push/pull output */
+    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+    while(1) {
+        /* Blink off (output low) */
+        gpio_set_level(BLINK_GPIO, 0);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        /* Blink on (output high) */
+        gpio_set_level(BLINK_GPIO, 1);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+
 void app_main()
 {
-    ESP_LOGI(TAG, "[APP] Startup..");
+	ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
     ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
 
@@ -138,6 +167,10 @@ void app_main()
     esp_log_level_set("OUTBOX", ESP_LOG_VERBOSE);
 
     nvs_flash_init();
+
+	ESP_LOGI(TAG, "Create blink task");
+    xTaskCreate(&blink_task, "blink_task", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
     wifi_init();
     mqtt_app_start();
+
 }
